@@ -1,0 +1,59 @@
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: fourmiz-security-headers
+  namespace: apps
+spec:
+  headers:
+    frameDeny: true
+    browserXssFilter: true
+    contentTypeNosniff: true
+    referrerPolicy: strict-origin-when-cross-origin
+    forceSTSHeader: true
+    stsSeconds: 31536000
+    stsIncludeSubdomains: true
+    stsPreload: true
+    customResponseHeaders:
+      Server: ""
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: fourmiz-api-ratelimit
+  namespace: apps
+spec:
+  rateLimit:
+    average: 120
+    burst: 60
+    period: 1m
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: fourmiz
+  namespace: apps
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`${APP_HOST}`) && PathPrefix(`/api`, `/ws`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: fourmiz-security-headers
+        - name: fourmiz-api-ratelimit
+      services:
+        - name: gateway
+          port: 80
+    - match: Host(`${APP_HOST}`)
+      kind: Rule
+      priority: 1
+      middlewares:
+        - name: fourmiz-security-headers
+      services:
+        - name: frontend
+          port: 80
+  tls:
+    certResolver: le_dns
+    domains:
+      - main: "${APP_HOST}"

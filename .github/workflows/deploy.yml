@@ -1,0 +1,53 @@
+name: Deploy to K3s
+
+on:
+  workflow_run:
+    workflows: ["Build & Release (Tag Only)"]
+    types: [completed]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, k8s-deploy]
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag (v*) from triggering SHA
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="${{ github.event.workflow_run.head_sha }}"
+          git fetch --force --tags
+          TAG="$(git tag --points-at "$SHA" | grep -E '^v[0-9]+' | head -n 1 || true)"
+          if [[ -z "$TAG" ]]; then
+            echo "No v* tag points to $SHA"
+            exit 1
+          fi
+          echo "VERSION=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy manifests
+        env:
+          IMAGE_ENGINE: ${{ secrets.DOCKER_USERNAME }}/fourmiz-engine:${{ steps.resolve.outputs.VERSION }}
+          IMAGE_GATEWAY: ${{ secrets.DOCKER_USERNAME }}/fourmiz-gateway:${{ steps.resolve.outputs.VERSION }}
+          IMAGE_FRONTEND: ${{ secrets.DOCKER_USERNAME }}/fourmiz-frontend:${{ steps.resolve.outputs.VERSION }}
+          APP_HOST: ${{ vars.FOURMIZ_HOST }} # Devra être configuré dynamiquement à fourmiz.dgsynthex.online
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${APP_HOST:?Set repository variable FOURMIZ_HOST before running deploy.}"
+
+          # On applique tous les manifestes du dossier K8s. On utilise kustomize ou envsubst pour remplacer l'host
+          # On boucle sur le dossier k8s et on remplace les images à la volée
+          for f in k8s/*.yaml; do
+            envsubst < "$f" > "/tmp/$(basename "$f")"
+            kubectl apply -f "/tmp/$(basename "$f")"
+          done
+
+          # On vérifie le démarrage des Pods
+          kubectl rollout status -n apps deployment/engine
+          kubectl rollout status -n apps deployment/gateway
+          kubectl rollout status -n apps deployment/frontend

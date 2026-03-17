@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: gateway
+  namespace: apps
   labels:
     app: gateway
 spec:
@@ -16,7 +17,7 @@ spec:
     spec:
       containers:
       - name: gateway
-        image: antsimulator-gateway:latest
+        image: ${IMAGE_GATEWAY}
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
@@ -26,16 +27,17 @@ spec:
           value: "engine:50051"
         resources:
           requests:
-            cpu: 50m
-            memory: 64Mi
-          limits:
-            cpu: 250m
+            cpu: 100m
             memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 1Gi
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: gateway
+  namespace: apps
 spec:
   selector:
     app: gateway
@@ -43,30 +45,3 @@ spec:
   - port: 80
     targetPort: 8080
     protocol: TCP
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: gateway-ingress
-  annotations:
-    # Use standard Traefik ingress class shipped with k3s
-    kubernetes.io/ingress.class: traefik
-spec:
-  rules:
-  - host: ant-simulator.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: gateway
-            port:
-              number: 80
-      - path: /ws
-        pathType: Prefix
-        backend:
-          service:
-            name: gateway
-            port:
-              number: 80

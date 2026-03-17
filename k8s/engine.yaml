@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: engine
+  namespace: apps
   labels:
     app: engine
 spec:
@@ -16,22 +17,30 @@ spec:
     spec:
       containers:
       - name: engine
-        image: antsimulator-engine:latest
+        image: ${IMAGE_ENGINE}
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 50051
         resources:
           requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
+            cpu: 250m
             memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        volumeMounts:
+          - name: fourmiz-data
+            mountPath: /data
+      volumes:
+        - name: fourmiz-data
+          persistentVolumeClaim:
+            claimName: fourmiz-data
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: engine
+  namespace: apps
 spec:
   selector:
     app: engine
