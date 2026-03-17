@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: engine
+  labels:
+    app: engine
+spec:
+  replicas: 1 # Simulation should only run on a single pod right now to hold unique state
+  selector:
+    matchLabels:
+      app: engine
+  template:
+    metadata:
+      labels:
+        app: engine
+    spec:
+      containers:
+      - name: engine
+        image: antsimulator-engine:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 50051
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: engine
+spec:
+  selector:
+    app: engine
+  ports:
+  - port: 50051
+    targetPort: 50051
+    # Note: gRPC requires HTTP/2, which is supported by default in k8s services,
+    # but some ingresses may require specific annotations. Here we only talk internal so TCP is fine.
+    protocol: TCP

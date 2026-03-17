@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package antsimulator;
+
+option go_package = "./proto";
+
+// Service principal gRPC exposé par Rust et consommé par Go
+service SimulationService {
+  // Envoi de commandes de contrôle au moteur
+  rpc SendCommand(CommandRequest) returns (CommandResponse);
+  
+  // Souscription au flux de données en temps réel (pour le WebSocket)
+  rpc StreamState(StreamRequest) returns (stream GameState);
+}
+
+// --- COMMANDES ---
+
+enum CommandType {
+  START = 0;
+  PAUSE = 1;
+  RESET = 2;
+  SPAWN_FOOD = 3; // Legacy?
+  SPAWN_PLANT = 4;
+  SPAWN_ANIMAL = 5;
+}
+
+message CommandRequest {
+  CommandType command = 1;
+  // Paramètres optionnels pour l'interaction dynamique
+  optional float x = 2;
+  optional float y = 3;
+  optional int32 amount = 4;
+}
+
+message CommandResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message StreamRequest {
+  // Demande une fréquence de mise à jour spécifique (ex: 30 fps)
+  int32 target_tps = 1;
+}
+
+// --- ÉTAT DE LA SIMULATION ---
+
+enum AntRole {
+  QUEEN = 0;
+  WORKER = 1;
+  SOLDIER = 2;
+}
+
+enum AntState {
+  IDLE = 0;
+  EXPLORING = 1;
+  RETURNING_WITH_FOOD = 2;
+}
+
+message Ant {
+  uint32 id = 1;
+  AntRole role = 2;
+  float x = 3;
+  float y = 4;
+  AntState state = 5;
+  float angle = 6;
+  uint32 faction_id = 7;
+}
+
+enum ResourceType {
+  PLANT = 0;
+  ANIMAL = 1;
+}
+
+message Resource {
+  uint32 id = 1;
+  float x = 2;
+  float y = 3;
+  uint32 quantity = 4; // Diminue quand les fourmis récoltent
+  ResourceType type = 5;
+}
+
+enum RoomType {
+  ROYAL = 0;
+  GRANARY = 1;
+  NURSERY = 2;
+}
+
+message Room {
+  uint32 id = 1;
+  RoomType room_type = 2;
+  float x = 3;
+  float y = 4;
+  float radius = 5; // Taille de la pièce
+}
+
+message Nest {
+  uint32 faction_id = 1;
+  repeated Room rooms = 2;
+}
+
+message GameState {
+  uint64 tick = 1;
+  repeated Ant ants = 2;
+  repeated Resource resources = 3;
+  repeated Nest nests = 4;
+  
+  // Optimisation : La carte des phéromones est envoyée sous forme de bytes compressés 
+  // (ex: run-length encoding ou un simple flat array) pour éviter l'overhead de la sérialisation d'objets imbriqués.
+  bytes encoded_pheromones = 5; 
+}
