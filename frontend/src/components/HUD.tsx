@@ -1,14 +1,15 @@
 import { Play, Square, RotateCcw, Activity } from 'lucide-react';
 import { CommandType } from '../types';
-import type { GameState } from '../types';
+import type { GameState, CameraState } from '../types';
 
 interface Props {
   gameState: GameState | null;
   connected: boolean;
   onCommand: (cmd: CommandType) => void;
+  cameraState?: CameraState | null;
 }
 
-export const HUD = ({ gameState, connected, onCommand }: Props) => {
+export const HUD = ({ gameState, connected, onCommand, cameraState }: Props) => {
   const population = (gameState?.ants || []).filter(a => a.role === 1).length;
   const foodReserves = (gameState?.resources || []).reduce((acc, r) => acc + r.quantity, 0);
   
@@ -129,6 +130,20 @@ export const HUD = ({ gameState, connected, onCommand }: Props) => {
           </button>
         </div>
       </div>
+
+      {cameraState && (
+        <div className="absolute bottom-6 right-6 w-40 h-40 bg-slate-900/60 border border-white/10 shadow-2xl rounded-xl overflow-hidden backdrop-blur-md pointer-events-auto">
+          <div 
+            className="absolute border-2 border-white/80 bg-white/20 shadow-[0_0_10px_rgba(255,255,255,0.2)]"
+            style={{
+              left: `${Math.max(0, (cameraState.x / cameraState.worldWidth) * 100)}%`,
+              top: `${Math.max(0, (cameraState.y / cameraState.worldHeight) * 100)}%`,
+              width: `${Math.min(100, (cameraState.width / cameraState.worldWidth) * 100)}%`,
+              height: `${Math.min(100, (cameraState.height / cameraState.worldHeight) * 100)}%`,
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 };

@@ -1,17 +1,70 @@
-import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import { useCallback, useMemo } from 'react';
 // @ts-ignore
-import { Stage, Graphics, Container } from '@pixi/react';
+import { Stage, Graphics, PixiComponent, useApp } from '@pixi/react';
 import * as PIXI from 'pixi.js';
+import { Viewport as PixiViewport } from 'pixi-viewport';
+
+export interface ViewportProps {
+  app: PIXI.Application;
+  screenWidth: number;
+  screenHeight: number;
+  worldWidth: number;
+  worldHeight: number;
+  children?: React.ReactNode;
+  onCameraChange?: (state: import('../types').CameraState) => void;
+}
+
+const PixiViewportComponent = PixiComponent('Viewport', {
+  create: (props: ViewportProps) => {
+    const viewport = new PixiViewport({
+      screenWidth: props.screenWidth,
+      screenHeight: props.screenHeight,
+      worldWidth: props.worldWidth,
+      worldHeight: props.worldHeight,
+      events: props.app.renderer.events,
+    });
+    viewport.drag().pinch().wheel().clampZoom({ minScale: 0.02, maxScale: 3.0 });
+    
+    // Zoom out slightly to see the map context by default
+    viewport.setZoom(0.3);
+    viewport.moveCenter(props.worldWidth / 2, props.worldHeight / 2);
+    
+    if (props.onCameraChange) {
+      const updateCamera = () => {
+        // @ts-ignore
+        props.onCameraChange({
+          x: viewport.left,
+          y: viewport.top,
+          width: props.screenWidth / viewport.scale.x,
+          height: props.screenHeight / viewport.scale.y,
+          worldWidth: props.worldWidth,
+          worldHeight: props.worldHeight,
+        });
+      };
+      viewport.on('moved', updateCamera);
+      viewport.on('zoomed', updateCamera);
+      setTimeout(updateCamera, 0);
+    }
+    
+    return viewport;
+  },
+});
+
+const ViewportWrapper = (props: any) => {
+  const app = useApp();
+  return <PixiViewportComponent app={app} {...props} />;
+};
 import { AntRole, AntState, ResourceType, RoomType } from '../types';
-import type { GameState, Ant, Resource } from '../types';
+import type { GameState, Ant, Resource, CameraState } from '../types';
 
 interface Props {
   width: number;
   height: number;
   gameState: GameState | null;
+  onCameraChange?: (state: CameraState) => void;
 }
 
-export const SimulationCanvas = ({ width, height, gameState }: Props) => {
+export const SimulationCanvas = ({ width, height, gameState, onCameraChange }: Props) => {
   
   // Scale factor: logic mapping
   const scaleRatio = 5; // 1 logic unit = 5 pixels (zoomed out a bit for the massive map)
@@ -25,17 +78,17 @@ export const SimulationCanvas = ({ width, height, gameState }: Props) => {
         
         if (ant.role === AntRole.QUEEN) {
           g.beginFill(0x9333ea, 1);
-          g.drawEllipse(0, -15, 6, 8); // Head
-          g.beginFill(0x7e22ce, 1);
-          g.drawEllipse(0, 0, 8, 10); // Thorax
-          g.beginFill(0x581c87, 1);
-          g.drawEllipse(0, 20, 14, 22); // Abdomen
+          const size = 12;
+          const hexPath = [
+            0, -size,
+            size * 0.866, -size / 2,
+            size * 0.866, size / 2,
+            0, size,
+            -size * 0.866, size / 2,
+            -size * 0.866, -size / 2,
+          ];
+          g.drawPolygon(hexPath);
           g.endFill();
-          g.lineStyle(2, 0x4c1d95); // Legs
-          g.moveTo(-8, 0); g.lineTo(-20, -5);
-          g.moveTo(8, 0); g.lineTo(20, -5);
-          g.moveTo(-8, 5); g.lineTo(-22, 10);
-          g.moveTo(8, 5); g.lineTo(22, 10);
         } else if (ant.role === AntRole.SOLDIER) {
           // Soldier Anatomy: Big head, Mandibles, Sturdy thorax
           g.beginFill(0x78350f, 1); 
@@ -61,18 +114,16 @@ export const SimulationCanvas = ({ width, height, gameState }: Props) => {
         } else {
           // Worker Anatomy
           g.beginFill(0x451a03, 1);
-          g.drawEllipse(10, 0, 4, 3); // Head
-          g.beginFill(0x78350f, 1); 
-          g.drawEllipse(4, 0, 5, 4); // Thorax
-          g.beginFill(0x271001, 1);
-          g.drawEllipse(-4, 0, 6, 5); // Abdomen
+          g.drawCircle(8, 0, 3);  // Head
+          g.drawCircle(0, 0, 4);  // Thorax
+          g.drawCircle(-8, 0, 5); // Abdomen
           g.endFill();
 
           g.lineStyle(1, 0x271001); // Legs
-          g.moveTo(4, -4); g.lineTo(2, -8);
-          g.moveTo(4, 4); g.lineTo(2, 8);
-          g.moveTo(0, -4); g.lineTo(-2, -8);
-          g.moveTo(0, 4); g.lineTo(-2, 8);
+          g.moveTo(0, -4); g.lineTo(2, -8);
+          g.moveTo(0, 4); g.lineTo(2, 8);
+          g.moveTo(-2, -4); g.lineTo(-4, -8);
+          g.moveTo(-2, 4); g.lineTo(-4, 8);
           g.lineStyle(0);
         }
 
@@ -120,7 +171,7 @@ export const SimulationCanvas = ({ width, height, gameState }: Props) => {
     g.clear();
     
     // Dirt Background
-    g.beginFill(0x1a1614, 1); 
+    g.beginFill(0xD2B48C, 1); 
     g.drawRect(0, 0, simWidth, simHeight);
     g.endFill();
 
@@ -165,79 +216,21 @@ export const SimulationCanvas = ({ width, height, gameState }: Props) => {
   const ants = useMemo(() => gameState?.ants || [], [gameState?.ants]);
   const resources = useMemo(() => gameState?.resources || [], [gameState?.resources]);
 
-  const [transform, setTransform] = useState({ x: 0, y: 0, scale: 0.1 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [isInitialized, setIsInitialized] = useState(false);
-  const lastPos = useRef({ x: 0, y: 0 });
-
-  // Center on Queen or nest on first load
-  useEffect(() => {
-    if (!isInitialized && gameState?.ants?.length) {
-      const queen = gameState.ants.find(a => a.role === AntRole.QUEEN);
-      const targetX = queen ? queen.x : (simWidth / scaleRatio / 2);
-      const targetY = queen ? queen.y : (simHeight / scaleRatio / 2);
-
-      const idealScale = 0.5; // Zoom in to see the ants clearly
-      
-      setTransform({
-        x: width/2 - (targetX * scaleRatio * idealScale),
-        y: height/2 - (targetY * scaleRatio * idealScale),
-        scale: idealScale
-      });
-      setIsInitialized(true);
-    }
-  }, [gameState?.ants, isInitialized, width, height]);
-
-  const onPointerDown = (e: any) => {
-    setIsDragging(true);
-    lastPos.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const onPointerMove = (e: any) => {
-    if (isDragging) {
-      const dx = e.clientX - lastPos.current.x;
-      const dy = e.clientY - lastPos.current.y;
-      setTransform((prev: any) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
-      lastPos.current = { x: e.clientX, y: e.clientY };
-    }
-  };
-
-  const onPointerUp = () => {
-    setIsDragging(false);
-  };
-
-  const onWheel = (e: any) => {
-     const zoomFactor = -e.deltaY * 0.0005;
-     let newScale = Math.max(0.02, Math.min(3.0, transform.scale + zoomFactor));
-     
-     const mouseX = e.clientX;
-     const mouseY = e.clientY;
-     
-     const newX = mouseX - (mouseX - transform.x) * (newScale / transform.scale);
-     const newY = mouseY - (mouseY - transform.y) * (newScale / transform.scale);
-     
-     setTransform({ x: newX, y: newY, scale: newScale });
-  };
+  // Custom transform state removed in favor of pixi-viewport
 
   return (
-    <div 
-        onPointerDown={onPointerDown} 
-        onPointerMove={onPointerMove} 
-        onPointerUp={onPointerUp} 
-        onPointerOut={onPointerUp}
-        onWheel={onWheel}
-        style={{ width: '100%', height: '100%' }}
-    >
+    <div style={{ width: '100%', height: '100%' }}>
         <Stage 
           width={width} 
           height={height} 
-          options={{ backgroundColor: 0x111111, antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1 }}
+          options={{ backgroundColor: 0xD2B48C, antialias: true, autoDensity: true, resolution: window.devicePixelRatio || 1 }}
         >
-          <Container 
-             x={transform.x} 
-             y={transform.y} 
-             scale={transform.scale}
-             interactive={true}
+          <ViewportWrapper 
+             screenWidth={width}
+             screenHeight={height}
+             worldWidth={simWidth}
+             worldHeight={simHeight}
+             onCameraChange={onCameraChange}
           >
               <Graphics draw={drawBackgroundAndNests} />
 
@@ -250,7 +243,7 @@ export const SimulationCanvas = ({ width, height, gameState }: Props) => {
               {ants.map((ant) => (
                 <AntGraphic key={`ant-${ant.id}`} ant={ant} />
               ))}
-          </Container>
+          </ViewportWrapper>
         </Stage>
     </div>
   );

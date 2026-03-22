@@ -1,7 +1,7 @@
 import { useEffect, useState, Suspense, lazy } from 'react';
 import { apiService } from './services/api';
 import { CommandType } from './types';
-import type { GameState } from './types';
+import type { GameState, CameraState } from './types';
 import { HUD } from './components/HUD';
 import { LoadingScreen } from './components/LoadingScreen';
 
@@ -10,6 +10,7 @@ const SimulationCanvas = lazy(() => import('./components/SimulationCanvas').then
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState | null>(null);
+  const [cameraState, setCameraState] = useState<CameraState | null>(null);
   const [connected, setConnected] = useState(false);
   const [toast, setToast] = useState<{msg: string, isErr: boolean} | null>(null);
   
@@ -74,12 +75,12 @@ export default function App() {
           {/* PixiJS Canvas Layer */}
           <div className="absolute inset-0 z-0 cursor-crosshair">
             <Suspense fallback={<LoadingScreen />}>
-              <SimulationCanvas width={dimensions.width} height={dimensions.height} gameState={gameState} />
+              <SimulationCanvas width={dimensions.width} height={dimensions.height} gameState={gameState} onCameraChange={setCameraState} />
             </Suspense>
           </div>
 
           {/* React UI Overlay Layer */}
-          <HUD gameState={gameState} connected={connected} onCommand={handleCommand} />
+          <HUD gameState={gameState} connected={connected} onCommand={handleCommand} cameraState={cameraState} />
         </>
       )}
 

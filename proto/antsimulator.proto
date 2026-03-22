@@ -107,4 +107,5 @@ message GameState {
   // Optimisation : La carte des phéromones est envoyée sous forme de bytes compressés 
   // (ex: run-length encoding ou un simple flat array) pour éviter l'overhead de la sérialisation d'objets imbriqués.
   bytes encoded_pheromones = 5; 
+  uint64 map_seed = 6;
 }

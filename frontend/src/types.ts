@@ -73,3 +73,12 @@ export interface GameState {
   nests: Nest[];
   encoded_pheromones: string; 
 }
+
+export interface CameraState {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  worldWidth: number;
+  worldHeight: number;
+}

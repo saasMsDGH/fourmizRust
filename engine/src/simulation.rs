@@ -6,6 +6,35 @@ use hecs::{World, Entity};
 use rand::Rng;
 // Collections standards pour stocker nos données
 use std::collections::{HashMap, HashSet, VecDeque};
+// Système de bruit pour générer la carte procédurale
+use noise::{NoiseFn, OpenSimplex};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TerrainType {
+    Water,
+    Dirt,
+    Rock,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WeatherState {
+    Clear,
+    Rain,
+}
+
+pub fn get_terrain_type(x: f32, y: f32, seed: u32) -> TerrainType {
+    let simplex = OpenSimplex::new(seed);
+    // Multiply by scale 0.005
+    let val = simplex.get([(x * 0.005) as f64, (y * 0.005) as f64]);
+    
+    if val < -0.3 {
+        TerrainType::Water
+    } else if val <= 0.6 {
+        TerrainType::Dirt
+    } else {
+        TerrainType::Rock
+    }
+}
 
 // --- CONSTANTES DU JEU ---
 // Nombre de fois que le moteur de jeu se met à jour par seconde
@@ -24,15 +53,16 @@ pub const ANT_SPEED_PER_TICK: f32 = ANT_SPEED_PER_SEC / TICK_RATE;
 // Coût énergétique d'une reine par minute au repos et lors de la ponte
 pub const QUEEN_METABOLISM_IDLE: u32 = 1; // per minute
 pub const QUEEN_METABOLISM_LAYING: u32 = 10; // per minute
+pub const MAX_TURN_ANGLE: f32 = 0.2; // Maximum turn angle per tick in radians
 // L'espérance de vie maximale de la reine en Ticks (10 années in-game => 87600 heures de jeu ou 87600 secondes IRL)
 pub const QUEEN_MAX_AGE_TICKS: u64 = 10 * 365 * 24 * 60 * 60 * 100; // 10 in-game years where 1 real second = 1 game hour. Wait, 1 second = 3600 seconds. 10 years = 87600 hours = 87600 real seconds.
 // Intervalle de perte de protéines pour la larve/nymphe
 pub const NYMPH_METABOLISM_INTERVAL: u64 = 90 * 100; 
 // Protéines récupérables sur le cadavre d'une fourmi morte
-pub const DEAD_ANT_PROTEINS: u32 = 20;
+pub const DEAD_ANT_PROTEINS: u16 = 20;
 
 // Ressources : maximum par cellule de la grille spatiale et au niveau global de la carte
-pub const RESOURCE_MAX_PER_CELL: u32 = 30;
+pub const RESOURCE_MAX_PER_CELL: u16 = 30;
 pub const RESOURCE_MAX_GLOBAL: usize = 1000;
 
 // --- COMPOSANTS ECS ---
@@ -61,14 +91,14 @@ pub struct AntData {
 
 // Composant pour une entité de type "Ressource"
 pub struct ResourceData {
-    pub quantity: u32,            // Quantité restante avant disparition
+    pub quantity: u16,            // Quantité restante avant disparition
     pub res_type: ResourceType,   // Type (Animal ou Plante)
 }
 
 // --- OPTIMISATION SPATIALE ("Spatial Hashing") ---
 // Map split into grid cells of size SPATIAL_CELL_SIZE for hash grid
 // L'espace est divisé en carrés de taille SPATIAL_CELL_SIZE pour y répartir toutes les entités
-pub const SPATIAL_CELL_SIZE: f32 = 20.0;
+pub const SPATIAL_CELL_SIZE: f32 = 50.0;
 // Nombre de colonnes et de lignes formées par ces carrés
 pub const SPATIAL_COLS: usize = (MAP_SIZE / SPATIAL_CELL_SIZE) as usize + 1;
 
@@ -77,13 +107,13 @@ pub const SPATIAL_COLS: usize = (MAP_SIZE / SPATIAL_CELL_SIZE) as usize + 1;
 // leurs positions dans cette grille (Calcul en O(1)).
 pub struct SpatialGrid {
     // Une HashMap dont la clé est un tuple (Colonne, Ligne) et la valeur est un tableau d'Entités hecs.
-    pub cells: HashMap<(usize, usize), Vec<Entity>>,
+    pub cells: rustc_hash::FxHashMap<(i32, i32), Vec<Entity>>,
 }
 
 impl SpatialGrid {
     // Constructeur d'une nouvelle grille spatiale
     pub fn new() -> Self {
-        Self { cells: HashMap::new() }
+        Self { cells: rustc_hash::FxHashMap::default() }
     }
     
     // Fonction appelée à chaque tick pour vider la grille de l'ancien état avant de tout réinsérer
@@ -92,25 +122,26 @@ impl SpatialGrid {
     }
     
     // Fonction calculant la case (Colonne `cx`, Ligne `cy`) à partir des coordonnées réelles (x, y) de l'entité
+    fn get_cell_coords(x: f32, y: f32) -> (i32, i32) {
+        ((x / SPATIAL_CELL_SIZE).floor() as i32, (y / SPATIAL_CELL_SIZE).floor() as i32)
+    }
+
     pub fn insert(&mut self, entity: Entity, x: f32, y: f32) {
-        let cx = (x / SPATIAL_CELL_SIZE).max(0.0) as usize;
-        let cy = (y / SPATIAL_CELL_SIZE).max(0.0) as usize;
+        let coords = Self::get_cell_coords(x, y);
         // Ajout de l'entité dans le tableau correspondant dans le HashMap, en créant le tableau si absent.
-        self.cells.entry((cx, cy)).or_insert_with(Vec::new).push(entity);
+        self.cells.entry(coords).or_insert_with(Vec::new).push(entity);
     }
     
     // Fonction cruciale : récupère toutes les entités se trouvant autour d'un point (x,y) donné dans un rayon défini.
     pub fn get_nearby(&self, x: f32, y: f32, radius: f32) -> Vec<Entity> {
         let mut result = Vec::new();
         // Calcule la bounding-box des cellules à couvrir avec le rayon cible
-        let min_cx = ((x - radius).max(0.0) / SPATIAL_CELL_SIZE) as usize;
-        let max_cx = ((x + radius).min(MAP_SIZE) / SPATIAL_CELL_SIZE) as usize;
-        let min_cy = ((y - radius).max(0.0) / SPATIAL_CELL_SIZE) as usize;
-        let max_cy = ((y + radius).min(MAP_SIZE) / SPATIAL_CELL_SIZE) as usize;
+        let min_cell = Self::get_cell_coords(x - radius, y - radius);
+        let max_cell = Self::get_cell_coords(x + radius, y + radius);
         
         // Itère uniquement sur les cellules correspondantes et collecte les entités
-        for cx in min_cx..=max_cx {
-            for cy in min_cy..=max_cy {
+        for cx in min_cell.0..=max_cell.0 {
+            for cy in min_cell.1..=max_cell.1 {
                 if let Some(entities) = self.cells.get(&(cx, cy)) {
                     result.extend(entities.iter().copied()); // Copie rapide car `Entity` est très léger
                 }
@@ -134,6 +165,10 @@ pub struct SimulationEngine {
     nests: Vec<Nest>,                         // La liste des nids et de leurs pièces (coordonnées)
     factions: HashMap<u32, FactionStats>,     // Le dictionnaire associant l'ID Faction à ses statistiques
     next_entity_id: u32,                      // Le compteur pour attribuer des IDs uniques aux nouvelles entités
+    pheromones_exploration: HashMap<(i32, i32), f32>, // Grille de phéromones d'exploration
+    pheromones_food: HashMap<(i32, i32), f32>, // Grille de phéromones de nourriture
+    map_seed: u32,                            // Graine unique pour la génération procédurale
+    pub weather: WeatherState,                // Etat global de la météo
 }
 
 impl SimulationEngine {
@@ -146,6 +181,10 @@ impl SimulationEngine {
             nests: Vec::new(),
             factions: HashMap::new(),
             next_entity_id: 1, // On commence à attribuer les ID depuis 1
+            pheromones_exploration: HashMap::new(),
+            pheromones_food: HashMap::new(),
+            map_seed: rand::thread_rng().gen(),
+            weather: WeatherState::Clear,
         };
         
         // Spawn 3 Factions (Multi-Colony)
@@ -272,7 +311,7 @@ impl SimulationEngine {
     
     // Flood fill algorithm for resources (max 30 per cell)
     // Algorithme "Flood Fill" (Remplissage par diffusion) pour les apparitions de ressources (max 30 éléments par case).
-    fn spawn_food_cluster(&mut self, start_x: f32, start_y: f32, mut amount: u32, res_type: ResourceType) {
+    fn spawn_food_cluster(&mut self, start_x: f32, start_y: f32, mut amount: u16, res_type: ResourceType) {
         // Utilisation d'une file d'attente (Queue) et d'un Set `visited` classiques pour l'algorithme BFS/Flood Fill.
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
@@ -293,8 +332,8 @@ impl SimulationEngine {
             
             // On vérifie combien de nourriture est DEJA présente dans la cellule
             let mut current_cell_amount = 0;
-            let cx_idx = x as usize;
-            let cy_idx = y as usize;
+            let cx_idx = x as i32;
+            let cy_idx = y as i32;
             // On consulte la structure spatiale
             if let Some(ents) = self.spatial_grid.cells.get(&(cx_idx, cy_idx)) {
                 for &e in ents {
@@ -363,7 +402,7 @@ impl SimulationEngine {
                 let amount = cmd.amount.unwrap_or(100);
                 log::info!("Engine: Spawning {} Plant at ({}, {})", amount, x, y);
                 // Le moteur utilise notre propre module (BFS ci-dessus) de Spawn.
-                self.spawn_food_cluster(x, y, amount as u32, ResourceType::Plant);
+                self.spawn_food_cluster(x, y, amount as u16, ResourceType::Plant);
             }
             // Commande pour spawner un prédateur mort ou animal
             CommandType::SpawnAnimal => {
@@ -371,7 +410,7 @@ impl SimulationEngine {
                 let y = cmd.y.unwrap_or_else(|| rng.gen_range(100.0..MAP_SIZE - 100.0));
                 let amount = cmd.amount.unwrap_or(100);
                 log::info!("Engine: Spawning {} Animal at ({}, {})", amount, x, y);
-                self.spawn_food_cluster(x, y, amount as u32, ResourceType::Animal);
+                self.spawn_food_cluster(x, y, amount as u16, ResourceType::Animal);
             }
             // Remise à zéro totale du jeu ("Reset State")
             CommandType::Reset => {
@@ -386,12 +425,8 @@ impl SimulationEngine {
         }
     }
     
-    // La boucle principale de la simulation. Cette fonction est appelée 100 fois par seconde (TICK_RATE).
-    pub fn tick(&mut self) {
-        self.tick += 1;
-        let mut rng = rand::thread_rng();
-        
-        // 1. Rebuild Spatial Hash Grid
+    // Système ECS pour mettre à jour la grille spatiale
+    fn update_spatial_grid_system(&mut self) {
         // A chaque tour, on vide la grille d'optimisation...
         self.spatial_grid.clear();
         // ... et on demande à `hecs` de nous trouver toutes les entités qui possèdent une composante `Position` 
@@ -399,18 +434,53 @@ impl SimulationEngine {
         for (entity, pos) in self.world.query::<&Position>().iter() {
             self.spatial_grid.insert(entity, pos.x, pos.y);
         }
+    }
+
+    // La boucle principale de la simulation. Cette fonction est appelée 100 fois par seconde (TICK_RATE).
+    pub fn tick(&mut self) {
+        self.tick += 1;
+        let mut rng = rand::thread_rng();
+        
+        // 1. Rebuild Spatial Hash Grid
+        self.update_spatial_grid_system();
+
+        // Evaporation des phéromones (tous les TICK_RATE cycles = 1 seconde)
+        if self.tick % (TICK_RATE as u64) == 0 {
+            let (exp_decay, food_decay) = if self.weather == WeatherState::Rain {
+                (0.50, 0.90) // Rain: evaporation x10 (perd 50% et 10%)
+            } else {
+                (0.95, 0.99) // Clear: normal (perd 5% et 1%)
+            };
+
+            // Exploration
+            self.pheromones_exploration.retain(|_, v| {
+                *v *= exp_decay;
+                *v > 0.1
+            });
+            // Nourriture
+            self.pheromones_food.retain(|_, v| {
+                *v *= food_decay;
+                *v > 0.1
+            });
+        }
 
         // 2. Background Resource Spawning
         // Evénement régulier (toutes les 60 secondes virtuelles)
         if self.tick % (60 * (TICK_RATE as u64)) == 0 {
+            // Weather change chance
+            if rng.gen_bool(0.2) { // 20% chance to change weather
+                self.weather = if self.weather == WeatherState::Clear { WeatherState::Rain } else { WeatherState::Clear };
+                log::info!("Engine: Weather changed to {:?}", self.weather);
+            }
+
             // Background plant/animal logic (limited by RESOURCE_MAX_GLOBAL)
-            let mut plant_qty = 0;
-            let mut animal_qty = 0;
+            let mut plant_qty: u32 = 0;
+            let mut animal_qty: u32 = 0;
             // On compte le nombre de ressources actuellement présentes sur le terrain
             for (_, res) in self.world.query_mut::<&ResourceData>() {
                 match res.res_type {
-                    ResourceType::Plant => plant_qty += res.quantity,
-                    ResourceType::Animal => animal_qty += res.quantity,
+                    ResourceType::Plant => plant_qty += res.quantity as u32,
+                    ResourceType::Animal => animal_qty += res.quantity as u32,
                 }
             }
             // S'il manque des plantes max par rapport à notre plafond global, la nature en régénère une grappe
@@ -591,13 +661,55 @@ impl SimulationEngine {
                 }
 
                 if ant.state == AntState::Exploring {
-                    // Mouvement libre erratique ("Wander") quand on explore. On change légèrement l'angle actuel (+ ou - 0.3 radian).
-                    let wander_angle = rng.gen_range(-0.3..0.3);
-                    // L'angle cible est l'ancien angle (atan2 permet d'avoir l'angle à partir du vecteur) plus cette variation
-                    let target_angle = vel.vy.atan2(vel.vx) + wander_angle;
-                    vel.vx = target_angle.cos();
-                    vel.vy = target_angle.sin();
+                    // Phéromone d'Exploration
+                    let cx = (pos.x / SPATIAL_CELL_SIZE).floor() as i32;
+                    let cy = (pos.y / SPATIAL_CELL_SIZE).floor() as i32;
+                    let pheromone = self.pheromones_exploration.entry((cx, cy)).or_insert(0.0);
+                    *pheromone = (*pheromone + 1.0).min(100.0);
+
+                    // Détection de gradient phéromonal (3 capteurs quant à la nourriture)
+                    let sensor_angle = 0.78; // ~45 degrés
+                    let sensor_distance = 15.0; // Poussée du capteur (distance physique)
+
+                    let mut get_ph_val = |angle: f32| -> f32 {
+                        let sx = pos.x + angle.cos() * sensor_distance;
+                        let sy = pos.y + angle.sin() * sensor_distance;
+                        let scx = (sx / SPATIAL_CELL_SIZE).floor() as i32;
+                        let scy = (sy / SPATIAL_CELL_SIZE).floor() as i32;
+                        *self.pheromones_food.get(&(scx, scy)).unwrap_or(&0.0)
+                    };
+
+                    let val_center = get_ph_val(ant.angle);
+                    let val_left = get_ph_val(ant.angle - sensor_angle);
+                    let val_right = get_ph_val(ant.angle + sensor_angle);
+
+                    // Seuil minimal pour considérer une piste valide (au-dessus du bruit de fond)
+                    let threshold = 0.1;
+                    
+                    if val_center > threshold || val_left > threshold || val_right > threshold {
+                        let turn_speed = 0.1; // Radian de pivot constant
+                        if val_center > val_left && val_center > val_right {
+                            // On va tout droit
+                        } else if val_left > val_right {
+                            ant.angle -= turn_speed; // Tourne à GAUCHE
+                        } else if val_right > val_left {
+                            ant.angle += turn_speed; // Tourne à DROITE
+                        }
+                    } else {
+                        // Perdu la piste ou pas de piste au départ : Mouvement libre erratique ("Wander")
+                        let wander_angle = rng.gen_range(-MAX_TURN_ANGLE..MAX_TURN_ANGLE);
+                        ant.angle += wander_angle;
+                    }
+
+                    vel.vx = ant.angle.cos();
+                    vel.vy = ant.angle.sin();
                 } else if ant.state == AntState::ReturningWithFood {
+                    // Phéromone de Nourriture (intensité +10.0, max 100.0)
+                    let cx = (pos.x / SPATIAL_CELL_SIZE).floor() as i32;
+                    let cy = (pos.y / SPATIAL_CELL_SIZE).floor() as i32;
+                    let pheromone = self.pheromones_food.entry((cx, cy)).or_insert(0.0);
+                    *pheromone = (*pheromone + 10.0).min(100.0);
+
                     // Calcul Vectoriel (Distance) : Vecteur du Point de Destination (Nid) - Vecteur de notre position actuelle
                     let dx = hx - pos.x;
                     let dy = hy - pos.y;
@@ -631,9 +743,20 @@ impl SimulationEngine {
                     vel.vy = (vel.vy / len) * ANT_SPEED_PER_TICK;
                 }
                 
-                // Application de la vélocité sur la configuration spatiale x/y globale
-                pos.x += vel.vx;
-                pos.y += vel.vy;
+                // Application de la vélocité sur la configuration spatiale avec vérification du terrain
+                let next_x = pos.x + vel.vx;
+                let next_y = pos.y + vel.vy;
+
+                let terrain = get_terrain_type(next_x, next_y, self.map_seed);
+                if terrain == TerrainType::Water || terrain == TerrainType::Rock {
+                    // Rebond naturel sur l'obstacle
+                    vel.vx *= -1.0;
+                    vel.vy *= -1.0;
+                    ant.angle += std::f32::consts::PI;
+                } else {
+                    pos.x = next_x;
+                    pos.y = next_y;
+                }
 
                 // Si la fourmi atteint le bord gauche (0) ou droit (MAP_SIZE)
                 if pos.x <= 0.0 || pos.x >= MAP_SIZE {
@@ -683,7 +806,7 @@ impl SimulationEngine {
                 id: res_id,
                 x: pos.x,
                 y: pos.y,
-                quantity: res.quantity,
+                quantity: res.quantity as u32,
                 r#type: res.res_type as i32, // `r#type` car `type` est un mot clé réservé en Rust
             });
             res_id += 1;
@@ -696,6 +819,7 @@ impl SimulationEngine {
             resources: out_res,                          // Tableau de sources de ressources
             nests: self.nests.clone(),                   // Clône rapide du vecteur contenant la configuration géométrique
             encoded_pheromones: vec![], // Omit for bandwidth (optimisation réseau, on les omet pour le moment)
+            map_seed: self.map_seed as u64,              // Graine de génération de la map procédurale
         }
     }
 }

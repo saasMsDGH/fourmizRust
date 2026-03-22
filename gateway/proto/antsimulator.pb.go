@@ -7,12 +7,11 @@
 package proto
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -25,10 +24,12 @@ const (
 type CommandType int32
 
 const (
-	CommandType_START      CommandType = 0
-	CommandType_PAUSE      CommandType = 1
-	CommandType_RESET      CommandType = 2
-	CommandType_SPAWN_FOOD CommandType = 3 // Permet à l'utilisateur d'interagir avec la map
+	CommandType_START        CommandType = 0
+	CommandType_PAUSE        CommandType = 1
+	CommandType_RESET        CommandType = 2
+	CommandType_SPAWN_FOOD   CommandType = 3 // Legacy?
+	CommandType_SPAWN_PLANT  CommandType = 4
+	CommandType_SPAWN_ANIMAL CommandType = 5
 )
 
 // Enum value maps for CommandType.
@@ -38,12 +39,16 @@ var (
 		1: "PAUSE",
 		2: "RESET",
 		3: "SPAWN_FOOD",
+		4: "SPAWN_PLANT",
+		5: "SPAWN_ANIMAL",
 	}
 	CommandType_value = map[string]int32{
-		"START":      0,
-		"PAUSE":      1,
-		"RESET":      2,
-		"SPAWN_FOOD": 3,
+		"START":        0,
+		"PAUSE":        1,
+		"RESET":        2,
+		"SPAWN_FOOD":   3,
+		"SPAWN_PLANT":  4,
+		"SPAWN_ANIMAL": 5,
 	}
 )
 
@@ -77,8 +82,9 @@ func (CommandType) EnumDescriptor() ([]byte, []int) {
 type AntRole int32
 
 const (
-	AntRole_QUEEN  AntRole = 0
-	AntRole_WORKER AntRole = 1
+	AntRole_QUEEN   AntRole = 0
+	AntRole_WORKER  AntRole = 1
+	AntRole_SOLDIER AntRole = 2
 )
 
 // Enum value maps for AntRole.
@@ -86,10 +92,12 @@ var (
 	AntRole_name = map[int32]string{
 		0: "QUEEN",
 		1: "WORKER",
+		2: "SOLDIER",
 	}
 	AntRole_value = map[string]int32{
-		"QUEEN":  0,
-		"WORKER": 1,
+		"QUEEN":   0,
+		"WORKER":  1,
+		"SOLDIER": 2,
 	}
 )
 
@@ -167,6 +175,101 @@ func (x AntState) Number() protoreflect.EnumNumber {
 // Deprecated: Use AntState.Descriptor instead.
 func (AntState) EnumDescriptor() ([]byte, []int) {
 	return file_antsimulator_proto_rawDescGZIP(), []int{2}
+}
+
+type ResourceType int32
+
+const (
+	ResourceType_PLANT  ResourceType = 0
+	ResourceType_ANIMAL ResourceType = 1
+)
+
+// Enum value maps for ResourceType.
+var (
+	ResourceType_name = map[int32]string{
+		0: "PLANT",
+		1: "ANIMAL",
+	}
+	ResourceType_value = map[string]int32{
+		"PLANT":  0,
+		"ANIMAL": 1,
+	}
+)
+
+func (x ResourceType) Enum() *ResourceType {
+	p := new(ResourceType)
+	*p = x
+	return p
+}
+
+func (x ResourceType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ResourceType) Descriptor() protoreflect.EnumDescriptor {
+	return file_antsimulator_proto_enumTypes[3].Descriptor()
+}
+
+func (ResourceType) Type() protoreflect.EnumType {
+	return &file_antsimulator_proto_enumTypes[3]
+}
+
+func (x ResourceType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ResourceType.Descriptor instead.
+func (ResourceType) EnumDescriptor() ([]byte, []int) {
+	return file_antsimulator_proto_rawDescGZIP(), []int{3}
+}
+
+type RoomType int32
+
+const (
+	RoomType_ROYAL   RoomType = 0
+	RoomType_GRANARY RoomType = 1
+	RoomType_NURSERY RoomType = 2
+)
+
+// Enum value maps for RoomType.
+var (
+	RoomType_name = map[int32]string{
+		0: "ROYAL",
+		1: "GRANARY",
+		2: "NURSERY",
+	}
+	RoomType_value = map[string]int32{
+		"ROYAL":   0,
+		"GRANARY": 1,
+		"NURSERY": 2,
+	}
+)
+
+func (x RoomType) Enum() *RoomType {
+	p := new(RoomType)
+	*p = x
+	return p
+}
+
+func (x RoomType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RoomType) Descriptor() protoreflect.EnumDescriptor {
+	return file_antsimulator_proto_enumTypes[4].Descriptor()
+}
+
+func (RoomType) Type() protoreflect.EnumType {
+	return &file_antsimulator_proto_enumTypes[4]
+}
+
+func (x RoomType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RoomType.Descriptor instead.
+func (RoomType) EnumDescriptor() ([]byte, []int) {
+	return file_antsimulator_proto_rawDescGZIP(), []int{4}
 }
 
 type CommandRequest struct {
@@ -343,6 +446,7 @@ type Ant struct {
 	Y             float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
 	State         AntState               `protobuf:"varint,5,opt,name=state,proto3,enum=antsimulator.AntState" json:"state,omitempty"`
 	Angle         float32                `protobuf:"fixed32,6,opt,name=angle,proto3" json:"angle,omitempty"`
+	FactionId     uint32                 `protobuf:"varint,7,opt,name=faction_id,json=factionId,proto3" json:"faction_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -419,12 +523,20 @@ func (x *Ant) GetAngle() float32 {
 	return 0
 }
 
+func (x *Ant) GetFactionId() uint32 {
+	if x != nil {
+		return x.FactionId
+	}
+	return 0
+}
+
 type Resource struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	X             float32                `protobuf:"fixed32,2,opt,name=x,proto3" json:"x,omitempty"`
 	Y             float32                `protobuf:"fixed32,3,opt,name=y,proto3" json:"y,omitempty"`
 	Quantity      uint32                 `protobuf:"varint,4,opt,name=quantity,proto3" json:"quantity,omitempty"` // Diminue quand les fourmis récoltent
+	Type          ResourceType           `protobuf:"varint,5,opt,name=type,proto3,enum=antsimulator.ResourceType" json:"type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -487,21 +599,158 @@ func (x *Resource) GetQuantity() uint32 {
 	return 0
 }
 
+func (x *Resource) GetType() ResourceType {
+	if x != nil {
+		return x.Type
+	}
+	return ResourceType_PLANT
+}
+
+type Room struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	RoomType      RoomType               `protobuf:"varint,2,opt,name=room_type,json=roomType,proto3,enum=antsimulator.RoomType" json:"room_type,omitempty"`
+	X             float32                `protobuf:"fixed32,3,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
+	Radius        float32                `protobuf:"fixed32,5,opt,name=radius,proto3" json:"radius,omitempty"` // Taille de la pièce
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Room) Reset() {
+	*x = Room{}
+	mi := &file_antsimulator_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Room) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Room) ProtoMessage() {}
+
+func (x *Room) ProtoReflect() protoreflect.Message {
+	mi := &file_antsimulator_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Room.ProtoReflect.Descriptor instead.
+func (*Room) Descriptor() ([]byte, []int) {
+	return file_antsimulator_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Room) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *Room) GetRoomType() RoomType {
+	if x != nil {
+		return x.RoomType
+	}
+	return RoomType_ROYAL
+}
+
+func (x *Room) GetX() float32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *Room) GetY() float32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *Room) GetRadius() float32 {
+	if x != nil {
+		return x.Radius
+	}
+	return 0
+}
+
+type Nest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	FactionId     uint32                 `protobuf:"varint,1,opt,name=faction_id,json=factionId,proto3" json:"faction_id,omitempty"`
+	Rooms         []*Room                `protobuf:"bytes,2,rep,name=rooms,proto3" json:"rooms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Nest) Reset() {
+	*x = Nest{}
+	mi := &file_antsimulator_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Nest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Nest) ProtoMessage() {}
+
+func (x *Nest) ProtoReflect() protoreflect.Message {
+	mi := &file_antsimulator_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Nest.ProtoReflect.Descriptor instead.
+func (*Nest) Descriptor() ([]byte, []int) {
+	return file_antsimulator_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *Nest) GetFactionId() uint32 {
+	if x != nil {
+		return x.FactionId
+	}
+	return 0
+}
+
+func (x *Nest) GetRooms() []*Room {
+	if x != nil {
+		return x.Rooms
+	}
+	return nil
+}
+
 type GameState struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Tick      uint64                 `protobuf:"varint,1,opt,name=tick,proto3" json:"tick,omitempty"`
 	Ants      []*Ant                 `protobuf:"bytes,2,rep,name=ants,proto3" json:"ants,omitempty"`
 	Resources []*Resource            `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
+	Nests     []*Nest                `protobuf:"bytes,4,rep,name=nests,proto3" json:"nests,omitempty"`
 	// Optimisation : La carte des phéromones est envoyée sous forme de bytes compressés
 	// (ex: run-length encoding ou un simple flat array) pour éviter l'overhead de la sérialisation d'objets imbriqués.
-	EncodedPheromones []byte `protobuf:"bytes,4,opt,name=encoded_pheromones,json=encodedPheromones,proto3" json:"encoded_pheromones,omitempty"`
+	EncodedPheromones []byte `protobuf:"bytes,5,opt,name=encoded_pheromones,json=encodedPheromones,proto3" json:"encoded_pheromones,omitempty"`
+	MapSeed           uint64 `protobuf:"varint,6,opt,name=map_seed,json=mapSeed,proto3" json:"map_seed,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *GameState) Reset() {
 	*x = GameState{}
-	mi := &file_antsimulator_proto_msgTypes[5]
+	mi := &file_antsimulator_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -513,7 +762,7 @@ func (x *GameState) String() string {
 func (*GameState) ProtoMessage() {}
 
 func (x *GameState) ProtoReflect() protoreflect.Message {
-	mi := &file_antsimulator_proto_msgTypes[5]
+	mi := &file_antsimulator_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -526,7 +775,7 @@ func (x *GameState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GameState.ProtoReflect.Descriptor instead.
 func (*GameState) Descriptor() ([]byte, []int) {
-	return file_antsimulator_proto_rawDescGZIP(), []int{5}
+	return file_antsimulator_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GameState) GetTick() uint64 {
@@ -550,11 +799,25 @@ func (x *GameState) GetResources() []*Resource {
 	return nil
 }
 
+func (x *GameState) GetNests() []*Nest {
+	if x != nil {
+		return x.Nests
+	}
+	return nil
+}
+
 func (x *GameState) GetEncodedPheromones() []byte {
 	if x != nil {
 		return x.EncodedPheromones
 	}
 	return nil
+}
+
+func (x *GameState) GetMapSeed() uint64 {
+	if x != nil {
+		return x.MapSeed
+	}
+	return 0
 }
 
 var File_antsimulator_proto protoreflect.FileDescriptor
@@ -575,38 +838,64 @@ const file_antsimulator_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\".\n" +
 	"\rStreamRequest\x12\x1d\n" +
 	"\n" +
-	"target_tps\x18\x01 \x01(\x05R\ttargetTps\"\xa0\x01\n" +
+	"target_tps\x18\x01 \x01(\x05R\ttargetTps\"\xbf\x01\n" +
 	"\x03Ant\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12)\n" +
 	"\x04role\x18\x02 \x01(\x0e2\x15.antsimulator.AntRoleR\x04role\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x02R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x02R\x01y\x12,\n" +
 	"\x05state\x18\x05 \x01(\x0e2\x16.antsimulator.AntStateR\x05state\x12\x14\n" +
-	"\x05angle\x18\x06 \x01(\x02R\x05angle\"R\n" +
+	"\x05angle\x18\x06 \x01(\x02R\x05angle\x12\x1d\n" +
+	"\n" +
+	"faction_id\x18\a \x01(\rR\tfactionId\"\x82\x01\n" +
 	"\bResource\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\rR\x02id\x12\f\n" +
 	"\x01x\x18\x02 \x01(\x02R\x01x\x12\f\n" +
 	"\x01y\x18\x03 \x01(\x02R\x01y\x12\x1a\n" +
-	"\bquantity\x18\x04 \x01(\rR\bquantity\"\xab\x01\n" +
+	"\bquantity\x18\x04 \x01(\rR\bquantity\x12.\n" +
+	"\x04type\x18\x05 \x01(\x0e2\x1a.antsimulator.ResourceTypeR\x04type\"\x7f\n" +
+	"\x04Room\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x123\n" +
+	"\troom_type\x18\x02 \x01(\x0e2\x16.antsimulator.RoomTypeR\broomType\x12\f\n" +
+	"\x01x\x18\x03 \x01(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x04 \x01(\x02R\x01y\x12\x16\n" +
+	"\x06radius\x18\x05 \x01(\x02R\x06radius\"O\n" +
+	"\x04Nest\x12\x1d\n" +
+	"\n" +
+	"faction_id\x18\x01 \x01(\rR\tfactionId\x12(\n" +
+	"\x05rooms\x18\x02 \x03(\v2\x12.antsimulator.RoomR\x05rooms\"\xf0\x01\n" +
 	"\tGameState\x12\x12\n" +
 	"\x04tick\x18\x01 \x01(\x04R\x04tick\x12%\n" +
 	"\x04ants\x18\x02 \x03(\v2\x11.antsimulator.AntR\x04ants\x124\n" +
-	"\tresources\x18\x03 \x03(\v2\x16.antsimulator.ResourceR\tresources\x12-\n" +
-	"\x12encoded_pheromones\x18\x04 \x01(\fR\x11encodedPheromones*>\n" +
+	"\tresources\x18\x03 \x03(\v2\x16.antsimulator.ResourceR\tresources\x12(\n" +
+	"\x05nests\x18\x04 \x03(\v2\x12.antsimulator.NestR\x05nests\x12-\n" +
+	"\x12encoded_pheromones\x18\x05 \x01(\fR\x11encodedPheromones\x12\x19\n" +
+	"\bmap_seed\x18\x06 \x01(\x04R\amapSeed*a\n" +
 	"\vCommandType\x12\t\n" +
 	"\x05START\x10\x00\x12\t\n" +
 	"\x05PAUSE\x10\x01\x12\t\n" +
 	"\x05RESET\x10\x02\x12\x0e\n" +
 	"\n" +
-	"SPAWN_FOOD\x10\x03* \n" +
+	"SPAWN_FOOD\x10\x03\x12\x0f\n" +
+	"\vSPAWN_PLANT\x10\x04\x12\x10\n" +
+	"\fSPAWN_ANIMAL\x10\x05*-\n" +
 	"\aAntRole\x12\t\n" +
 	"\x05QUEEN\x10\x00\x12\n" +
 	"\n" +
-	"\x06WORKER\x10\x01*<\n" +
+	"\x06WORKER\x10\x01\x12\v\n" +
+	"\aSOLDIER\x10\x02*<\n" +
 	"\bAntState\x12\b\n" +
 	"\x04IDLE\x10\x00\x12\r\n" +
 	"\tEXPLORING\x10\x01\x12\x17\n" +
-	"\x13RETURNING_WITH_FOOD\x10\x022\xa6\x01\n" +
+	"\x13RETURNING_WITH_FOOD\x10\x02*%\n" +
+	"\fResourceType\x12\t\n" +
+	"\x05PLANT\x10\x00\x12\n" +
+	"\n" +
+	"\x06ANIMAL\x10\x01*/\n" +
+	"\bRoomType\x12\t\n" +
+	"\x05ROYAL\x10\x00\x12\v\n" +
+	"\aGRANARY\x10\x01\x12\v\n" +
+	"\aNURSERY\x10\x022\xa6\x01\n" +
 	"\x11SimulationService\x12J\n" +
 	"\vSendCommand\x12\x1c.antsimulator.CommandRequest\x1a\x1d.antsimulator.CommandResponse\x12E\n" +
 	"\vStreamState\x12\x1b.antsimulator.StreamRequest\x1a\x17.antsimulator.GameState0\x01B\tZ\a./protob\x06proto3"
@@ -623,34 +912,42 @@ func file_antsimulator_proto_rawDescGZIP() []byte {
 	return file_antsimulator_proto_rawDescData
 }
 
-var file_antsimulator_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_antsimulator_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_antsimulator_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_antsimulator_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_antsimulator_proto_goTypes = []any{
 	(CommandType)(0),        // 0: antsimulator.CommandType
 	(AntRole)(0),            // 1: antsimulator.AntRole
 	(AntState)(0),           // 2: antsimulator.AntState
-	(*CommandRequest)(nil),  // 3: antsimulator.CommandRequest
-	(*CommandResponse)(nil), // 4: antsimulator.CommandResponse
-	(*StreamRequest)(nil),   // 5: antsimulator.StreamRequest
-	(*Ant)(nil),             // 6: antsimulator.Ant
-	(*Resource)(nil),        // 7: antsimulator.Resource
-	(*GameState)(nil),       // 8: antsimulator.GameState
+	(ResourceType)(0),       // 3: antsimulator.ResourceType
+	(RoomType)(0),           // 4: antsimulator.RoomType
+	(*CommandRequest)(nil),  // 5: antsimulator.CommandRequest
+	(*CommandResponse)(nil), // 6: antsimulator.CommandResponse
+	(*StreamRequest)(nil),   // 7: antsimulator.StreamRequest
+	(*Ant)(nil),             // 8: antsimulator.Ant
+	(*Resource)(nil),        // 9: antsimulator.Resource
+	(*Room)(nil),            // 10: antsimulator.Room
+	(*Nest)(nil),            // 11: antsimulator.Nest
+	(*GameState)(nil),       // 12: antsimulator.GameState
 }
 var file_antsimulator_proto_depIdxs = []int32{
-	0, // 0: antsimulator.CommandRequest.command:type_name -> antsimulator.CommandType
-	1, // 1: antsimulator.Ant.role:type_name -> antsimulator.AntRole
-	2, // 2: antsimulator.Ant.state:type_name -> antsimulator.AntState
-	6, // 3: antsimulator.GameState.ants:type_name -> antsimulator.Ant
-	7, // 4: antsimulator.GameState.resources:type_name -> antsimulator.Resource
-	3, // 5: antsimulator.SimulationService.SendCommand:input_type -> antsimulator.CommandRequest
-	5, // 6: antsimulator.SimulationService.StreamState:input_type -> antsimulator.StreamRequest
-	4, // 7: antsimulator.SimulationService.SendCommand:output_type -> antsimulator.CommandResponse
-	8, // 8: antsimulator.SimulationService.StreamState:output_type -> antsimulator.GameState
-	7, // [7:9] is the sub-list for method output_type
-	5, // [5:7] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	0,  // 0: antsimulator.CommandRequest.command:type_name -> antsimulator.CommandType
+	1,  // 1: antsimulator.Ant.role:type_name -> antsimulator.AntRole
+	2,  // 2: antsimulator.Ant.state:type_name -> antsimulator.AntState
+	3,  // 3: antsimulator.Resource.type:type_name -> antsimulator.ResourceType
+	4,  // 4: antsimulator.Room.room_type:type_name -> antsimulator.RoomType
+	10, // 5: antsimulator.Nest.rooms:type_name -> antsimulator.Room
+	8,  // 6: antsimulator.GameState.ants:type_name -> antsimulator.Ant
+	9,  // 7: antsimulator.GameState.resources:type_name -> antsimulator.Resource
+	11, // 8: antsimulator.GameState.nests:type_name -> antsimulator.Nest
+	5,  // 9: antsimulator.SimulationService.SendCommand:input_type -> antsimulator.CommandRequest
+	7,  // 10: antsimulator.SimulationService.StreamState:input_type -> antsimulator.StreamRequest
+	6,  // 11: antsimulator.SimulationService.SendCommand:output_type -> antsimulator.CommandResponse
+	12, // 12: antsimulator.SimulationService.StreamState:output_type -> antsimulator.GameState
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_antsimulator_proto_init() }
@@ -664,8 +961,8 @@ func file_antsimulator_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_antsimulator_proto_rawDesc), len(file_antsimulator_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   6,
+			NumEnums:      5,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
